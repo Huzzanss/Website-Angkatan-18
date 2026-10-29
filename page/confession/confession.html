@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confession | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="confession">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="hidden"></div>
+            <h1>Confession</h1>
+            <p>Ceritakan isi hati tanpa menyebut nama</p>
+        </div>
+
+        <div class="msg-form-wrap">
+            <div class="msg-form-card">
+                <h3>Kirim Confession</h3>
+                <form id="form" novalidate>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="fTo">Untuk (opsional)</label>
+                            <input id="fTo" maxlength="100" placeholder="Nama atau inisial">
+                        </div>
+                        <div class="form-group">
+                            <label for="fMood">Suasana</label>
+                            <select id="fMood">
+                                <option>Senang</option><option>Sedih</option><option>Galau</option><option>Lucu</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="fContent">Cerita</label>
+                        <textarea id="fContent" maxlength="1500" placeholder="Tulis ceritamu. Nama pengirim tidak disimpan."></textarea>
+                        <div class="char-count"><span id="count">0</span>/1500</div>
+                    </div>
+                    <div class="form-error" id="err" hidden></div>
+                    <button class="btn btn-full" id="submitBtn" type="submit">Kirim Confession</button>
+                </form>
+            </div>
+            <div class="notice" style="width:100%;margin-top:14px"><span data-icon="info" data-size="16"></span><span>Confession ditinjau admin dulu sebelum tampil. Jaga kata-kata, jangan menyerang atau mempermalukan orang lain.</span></div>
+        </div>
+
+        <div class="stack" id="list">
+            <div class="loading-state"><div class="spinner"></div>Memuat confession...</div>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var list = document.getElementById("list");
+        var content = document.getElementById("fContent");
+        var LIKED_KEY = "a18_conf_liked";
+        var liked = [];
+        try { liked = JSON.parse(localStorage.getItem(LIKED_KEY)) || []; } catch (e) { liked = []; }
+
+        function render(items) {
+            if (!items.length) {
+                list.innerHTML = '<div class="empty-state">Belum ada confession.</div>';
+                return;
+            }
+            list.innerHTML = items.map(function (c, i) {
+                var did = liked.indexOf(c.id) !== -1;
+                return '<article class="conf-card"><div class="conf-top">' +
+                    '<span class="conf-number">#' + (items.length - i) + " &middot; " + A.esc(A.relativeTime(c.createdAt)) + "</span>" +
+                    '<span class="pill">' + A.esc(c.mood) + "</span></div>" +
+                    (c.to ? '<div class="conf-to">Untuk: ' + A.esc(c.to) + "</div>" : "") +
+                    '<p class="msg-content">' + A.esc(c.content) + "</p>" +
+                    '<div style="margin-top:12px"><button class="like-btn' + (did ? " liked" : "") + '" data-id="' + A.esc(c.id) + '"' + (did ? " disabled" : "") + ">" +
+                    A.icon("heart", 14) + ' <span>' + (c.likes || 0) + "</span></button></div></article>";
+            }).join("");
+        }
+
+        function load() {
+            A.api("/confessions").then(render).catch(function (err) {
+                list.innerHTML = '<div class="empty-state">' + A.esc(err.message) + "</div>";
+            });
+        }
+
+        list.addEventListener("click", function (e) {
+            var btn = e.target.closest(".like-btn");
+            if (!btn || btn.disabled) return;
+            var id = btn.getAttribute("data-id");
+            btn.disabled = true;
+            A.api("/confessions/" + encodeURIComponent(id) + "/like", { method: "PATCH" }).then(function (r) {
+                liked.push(id);
+                localStorage.setItem(LIKED_KEY, JSON.stringify(liked));
+                btn.classList.add("liked");
+                btn.querySelector("span").textContent = r.likes;
+            }).catch(function (err) {
+                btn.disabled = false;
+                A.toast(err.message, "error");
+            });
+        });
+
+        content.addEventListener("input", function () { document.getElementById("count").textContent = content.value.length; });
+
+        document.getElementById("form").addEventListener("submit", function (e) {
+            e.preventDefault();
+            var err = document.getElementById("err");
+            var btn = document.getElementById("submitBtn");
+            err.hidden = true;
+            if (!content.value.trim()) {
+                err.textContent = "Cerita tidak boleh kosong.";
+                err.hidden = false;
+                return;
+            }
+            btn.disabled = true;
+            A.api("/confessions", {
+                method: "POST",
+                body: { to: document.getElementById("fTo").value, mood: document.getElementById("fMood").value, content: content.value }
+            }).then(function (r) {
+                A.toast(r.message || "Terkirim.");
+                e.target.reset();
+                document.getElementById("count").textContent = "0";
+                if (typeof playSfx === "function") playSfx("success");
+            }).catch(function (ex) {
+                err.textContent = ex.message;
+                err.hidden = false;
+            }).then(function () { btn.disabled = false; });
+        });
+
+        load();
+    })();
+    </script>
+</body>
+</html>

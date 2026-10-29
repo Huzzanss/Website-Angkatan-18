@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galeri | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="gallery">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="image"></div>
+            <h1>Galeri</h1>
+            <p>Foto dan momen spesial Angkatan 18</p>
+        </div>
+
+        <div class="gallery-section">
+            <div class="gallery-grid" id="grid">
+                <div class="loading-state"><div class="spinner"></div>Memuat galeri...</div>
+            </div>
+        </div>
+    </main>
+
+    <div id="lightbox" role="dialog" aria-modal="true" aria-label="Pratinjau foto">
+        <div id="lightboxOverlay"></div>
+        <div id="lightboxContent">
+            <button id="lightboxClose" aria-label="Tutup"><span data-icon="x" data-size="20"></span></button>
+            <img id="lightboxImg" src="" alt="">
+            <p id="lightboxTitle"></p>
+        </div>
+    </div>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var photos = [];
+        var current = -1;
+        var grid = document.getElementById("grid");
+        var box = document.getElementById("lightbox");
+        var img = document.getElementById("lightboxImg");
+        var title = document.getElementById("lightboxTitle");
+
+        function render() {
+            if (!photos.length) {
+                grid.innerHTML = '<div class="gallery-placeholder">Belum ada foto di galeri.</div>';
+                return;
+            }
+            grid.innerHTML = photos.map(function (p, i) {
+                return '<div class="gallery-item" data-i="' + i + '" tabindex="0" role="button" aria-label="Buka foto ' + (i + 1) + '">' +
+                    '<img src="' + A.esc(p.url) + '" alt="' + A.esc(p.caption || "Foto angkatan") + '" loading="lazy">' +
+                    (p.caption ? '<div class="gallery-item-overlay"><p>' + A.esc(p.caption) + "</p></div>" : "") +
+                    "</div>";
+            }).join("");
+        }
+
+        var lastFocus = null;
+        function show(i) {
+            if (!photos.length) return;
+            if (current < 0) lastFocus = document.activeElement;
+            current = (i + photos.length) % photos.length;
+            img.src = photos[current].url;
+            img.alt = photos[current].caption || "Foto angkatan";
+            title.textContent = (photos[current].caption ? photos[current].caption + " - " : "") + (current + 1) + " / " + photos.length;
+            box.classList.add("open");
+            document.getElementById("lightboxClose").focus();
+        }
+        function close() {
+            box.classList.remove("open");
+            img.src = "";
+            current = -1;
+            if (lastFocus && lastFocus.focus) lastFocus.focus();
+        }
+
+        grid.addEventListener("click", function (e) {
+            var item = e.target.closest(".gallery-item");
+            if (item) show(Number(item.getAttribute("data-i")));
+        });
+        grid.addEventListener("keydown", function (e) {
+            var item = e.target.closest(".gallery-item");
+            if (item && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); show(Number(item.getAttribute("data-i"))); }
+        });
+        document.getElementById("lightboxClose").addEventListener("click", close);
+        document.getElementById("lightboxOverlay").addEventListener("click", close);
+        window.addEventListener("keydown", function (e) {
+            if (current < 0) return;
+            if (e.key === "Escape") close();
+            if (e.key === "ArrowRight") show(current + 1);
+            if (e.key === "ArrowLeft") show(current - 1);
+        });
+
+        A.api("/gallery").then(function (data) {
+            photos = data;
+            render();
+        }).catch(function (err) {
+            grid.innerHTML = '<div class="gallery-placeholder">' + A.esc(err.message) + "</div>";
+        });
+    })();
+    </script>
+</body>
+</html>

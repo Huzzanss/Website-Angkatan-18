@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Siswa | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="students">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="users"></div>
+            <h1>Data Siswa</h1>
+            <p>Kenali teman-teman seangkatan</p>
+        </div>
+
+        <div class="controls">
+            <div class="search-wrap">
+                <span class="search-icon" data-icon="search" data-size="16"></span>
+                <input type="search" id="searchInput" class="search-box" placeholder="Cari nama siswa..." aria-label="Cari nama siswa">
+            </div>
+            <div class="filter-tabs" id="filterTabs">
+                <button class="filter-tab active" data-filter="all">Semua</button>
+                <button class="filter-tab" data-filter="L">Putra</button>
+                <button class="filter-tab" data-filter="P">Putri</button>
+            </div>
+            <select id="sortSelect" class="sort-select" aria-label="Urutkan nama">
+                <option value="asc">Urutkan: A - Z</option>
+                <option value="desc">Urutkan: Z - A</option>
+            </select>
+        </div>
+
+        <div class="students-grid" id="grid">
+            <div class="loading-state"><div class="spinner"></div>Memuat data siswa...</div>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script src="../../students-data.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var students = window.A18_STUDENTS || [];
+        var filter = "all";
+        var sortDir = "asc";
+        var grid = document.getElementById("grid");
+        var search = document.getElementById("searchInput");
+
+        function count(g) {
+            return students.filter(function (s) { return s.gender === g; }).length;
+        }
+
+        function updateTabs() {
+            var tabs = document.querySelectorAll("#filterTabs .filter-tab");
+            tabs[0].textContent = "Semua (" + students.length + ")";
+            tabs[1].textContent = "Putra (" + count("L") + ")";
+            tabs[2].textContent = "Putri (" + count("P") + ")";
+        }
+
+        function render() {
+            var q = search.value.trim().toLowerCase();
+            var list = students.filter(function (s) {
+                return (filter === "all" || s.gender === filter) &&
+                    (!q || String(s.name).toLowerCase().indexOf(q) !== -1);
+            });
+            list.sort(function (a, b) {
+                var r = String(a.name).localeCompare(String(b.name), "id", { sensitivity: "base" });
+                return sortDir === "asc" ? r : -r;
+            });
+            if (!list.length) {
+                grid.innerHTML = '<div class="empty-state">' +
+                    (students.length ? "Tidak ada siswa yang cocok." : "Data siswa belum diisi oleh admin.") + "</div>";
+                return;
+            }
+            grid.innerHTML = list.map(function (s, i) {
+                var badge = s.gender === "L" ? '<span class="student-badge badge-male">Putra</span>'
+                    : s.gender === "P" ? '<span class="student-badge badge-female">Putri</span>' : "";
+                return '<div class="student-card"><div class="student-top">' +
+                    '<div class="student-avatar" style="background:' + A.avatarColor(s.name) + '">' + A.esc(A.initials(s.name)) + "</div>" +
+                    badge + "</div>" +
+                    '<div class="student-name">' + A.esc(s.name) + "</div>" +
+                    "</div>";
+            }).join("");
+        }
+
+        document.getElementById("filterTabs").addEventListener("click", function (e) {
+            var btn = e.target.closest("[data-filter]");
+            if (!btn) return;
+            filter = btn.getAttribute("data-filter");
+            Array.prototype.forEach.call(this.children, function (b) { b.classList.toggle("active", b === btn); });
+            render();
+        });
+        search.addEventListener("input", render);
+        document.getElementById("sortSelect").addEventListener("change", function () {
+            sortDir = this.value;
+            render();
+        });
+
+        updateTabs();
+        render();
+    })();
+    </script>
+</body>
+</html>

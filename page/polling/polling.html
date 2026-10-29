@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polling | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="polling">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="poll"></div>
+            <h1>Polling</h1>
+            <p>Suara kamu menentukan keputusan angkatan</p>
+        </div>
+
+        <div class="stack" id="list">
+            <div class="loading-state"><div class="spinner"></div>Memuat polling...</div>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var KEY = "a18_poll_votes";
+        var votes = {};
+        try { votes = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { votes = {}; }
+        var showResults = {};
+        var polls = [];
+        var list = document.getElementById("list");
+
+        function total(p) { return p.options.reduce(function (n, o) { return n + o.votes; }, 0); }
+
+        function card(p) {
+            var t = total(p);
+            var voted = votes[p.id] !== undefined;
+            var closed = p.active === false;
+            var results = voted || closed || showResults[p.id];
+            var max = Math.max.apply(null, p.options.map(function (o) { return o.votes; }));
+            var html = '<article class="poll-card"><div class="poll-question">' + A.esc(p.question) + "</div>";
+
+            if (results) {
+                html += '<div class="poll-options">' + p.options.map(function (o, i) {
+                    var pct = t ? Math.round((o.votes / t) * 100) : 0;
+                    var cls = "poll-result" + (t && o.votes === max ? " poll-winner" : "") + (votes[p.id] === i ? " poll-mine" : "");
+                    return '<div class="' + cls + '"><div class="poll-result-bar" style="width:' + pct + '%"></div>' +
+                        '<div class="poll-result-text"><span>' + A.esc(o.text) + (votes[p.id] === i ? " (pilihanmu)" : "") +
+                        "</span><span>" + pct + "% &middot; " + o.votes + "</span></div></div>";
+                }).join("") + "</div>";
+            } else {
+                html += '<div class="poll-options">' + p.options.map(function (o, i) {
+                    return '<button class="poll-option" data-id="' + A.esc(p.id) + '" data-i="' + i + '">' + A.esc(o.text) + "</button>";
+                }).join("") + "</div>";
+            }
+
+            html += '<div class="poll-footer"><span>' + t + " suara" + (closed ? " &middot; Ditutup" : "") + "</span>";
+            if (voted) html += '<span class="poll-voted">Kamu sudah memilih</span>';
+            else if (!closed && !results) html += '<button class="btn-ghost btn-sm" data-results="' + A.esc(p.id) + '">Lihat hasil</button>';
+            return html + "</div></article>";
+        }
+
+        function render() {
+            if (!polls.length) {
+                list.innerHTML = '<div class="empty-state">Belum ada polling.</div>';
+                return;
+            }
+            list.innerHTML = polls.map(card).join("");
+        }
+
+        list.addEventListener("click", function (e) {
+            var opt = e.target.closest(".poll-option");
+            var res = e.target.closest("[data-results]");
+            if (res) { showResults[res.getAttribute("data-results")] = true; render(); return; }
+            if (!opt) return;
+            var id = opt.getAttribute("data-id");
+            var index = Number(opt.getAttribute("data-i"));
+            Array.prototype.forEach.call(list.querySelectorAll(".poll-option"), function (b) { b.disabled = true; });
+            A.api("/polls/" + encodeURIComponent(id) + "/vote", { method: "PATCH", body: { index: index } }).then(function () {
+                votes[id] = index;
+                localStorage.setItem(KEY, JSON.stringify(votes));
+                if (typeof playSfx === "function") playSfx("success");
+                A.toast("Suaramu tercatat.");
+                return load();
+            }).catch(function (err) {
+                A.toast(err.message, "error");
+                render();
+            });
+        });
+
+        function load() {
+            return A.api("/polls").then(function (d) { polls = d; render(); })
+                .catch(function (err) { list.innerHTML = '<div class="empty-state">' + A.esc(err.message) + "</div>"; });
+        }
+
+        load();
+        setInterval(load, 30000); // hasil diperbarui otomatis
+    })();
+    </script>
+</body>
+</html>

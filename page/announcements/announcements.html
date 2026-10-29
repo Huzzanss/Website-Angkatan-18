@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pengumuman | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="announcements">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="bell"></div>
+            <h1>Pengumuman</h1>
+            <p>Informasi penting untuk Angkatan 18</p>
+        </div>
+
+        <div class="announcements-list" id="list">
+            <div class="loading-state"><div class="spinner"></div>Memuat pengumuman...</div>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var list = document.getElementById("list");
+        var LABEL = { high: "Penting", medium: "Sedang", low: "Info" };
+
+        A.api("/announcements").then(function (items) {
+            if (!items.length) {
+                list.innerHTML = '<div class="empty-state">Belum ada pengumuman.</div>';
+                return;
+            }
+            list.innerHTML = items.map(function (a) {
+                var p = LABEL[a.priority] ? a.priority : "low";
+                return '<article class="announcement-card priority-' + p + '">' +
+                    "<h3>" + A.esc(a.title) + "</h3><p>" + A.esc(a.body) + "</p>" +
+                    '<div class="announcement-date">' + A.icon("clock", 13) + " " + A.esc(A.formatDate(a.createdAt)) +
+                    ' &middot; <span class="pill" style="margin-left:2px">' + LABEL[p] + "</span></div></article>";
+            }).join("");
+        }).catch(function (err) {
+            list.innerHTML = '<div class="empty-state">' + A.esc(err.message) + "</div>";
+        });
+    })();
+    </script>
+</body>
+</html>

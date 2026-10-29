@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Capsule | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="timecapsule">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="lock"></div>
+            <h1>Time Capsule</h1>
+            <p>Titip pesan untuk dibaca bersama di masa depan</p>
+        </div>
+
+        <div class="capsule-countdown-wrap">
+            <div class="capsule-countdown" id="countdownBox">
+                <div class="capsule-lock" data-icon="lock" data-size="26"></div>
+                <div class="capsule-opens" id="opensLabel">Memuat...</div>
+                <div class="capsule-date" id="opensDate"></div>
+                <div class="capsule-timer" id="timer" hidden>
+                    <div class="timer-block"><span id="tD">0</span><p>Hari</p></div><div class="timer-sep">:</div>
+                    <div class="timer-block"><span id="tH">00</span><p>Jam</p></div><div class="timer-sep">:</div>
+                    <div class="timer-block"><span id="tM">00</span><p>Menit</p></div><div class="timer-sep">:</div>
+                    <div class="timer-block"><span id="tS">00</span><p>Detik</p></div>
+                </div>
+                <p class="form-hint" id="countLabel" style="margin-top:18px"></p>
+            </div>
+        </div>
+
+        <div class="msg-form-wrap" id="formWrap">
+            <div class="msg-form-card">
+                <h3>Titip Pesan</h3>
+                <form id="form" novalidate>
+                    <div class="form-group">
+                        <label for="fAuthor">Nama</label>
+                        <input id="fAuthor" maxlength="100" placeholder="Nama kamu">
+                    </div>
+                    <div class="form-group">
+                        <label for="fContent">Pesan untuk masa depan</label>
+                        <textarea id="fContent" maxlength="2000" placeholder="Tulis untuk dirimu dan teman-temanmu di masa depan..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="fDream">Cita-cita (opsional)</label>
+                        <input id="fDream" maxlength="200" placeholder="Kamu ingin jadi apa?">
+                    </div>
+                    <div class="form-error" id="err" hidden></div>
+                    <button class="btn btn-full" id="submitBtn" type="submit">Simpan di Time Capsule</button>
+                </form>
+            </div>
+            <div class="notice" style="width:100%;margin-top:14px"><span data-icon="info" data-size="16"></span><span>Pesan tersembunyi dan baru bisa dibaca setelah tanggal pembukaan.</span></div>
+        </div>
+
+        <div class="stack" id="messages" hidden></div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var $ = function (id) { return document.getElementById(id); };
+        var target = null;
+        var timerId = null;
+
+        function pad(n) { return String(n).padStart(2, "0"); }
+
+        function tick() {
+            var diff = target - Date.now();
+            if (diff <= 0) { clearInterval(timerId); load(); return; }
+            var s = Math.floor(diff / 1000);
+            $("tD").textContent = Math.floor(s / 86400);
+            $("tH").textContent = pad(Math.floor((s % 86400) / 3600));
+            $("tM").textContent = pad(Math.floor((s % 3600) / 60));
+            $("tS").textContent = pad(s % 60);
+        }
+
+        function render(d) {
+            target = new Date(d.unlockDate).getTime();
+            $("opensDate").textContent = A.formatDate(target);
+            $("countLabel").textContent = d.count + " pesan sudah tersimpan";
+
+            if (d.unlocked) {
+                $("opensLabel").textContent = "Time Capsule sudah terbuka";
+                $("timer").hidden = true;
+                $("formWrap").hidden = true;
+                $("messages").hidden = false;
+                $("messages").innerHTML = d.messages.length ? d.messages.map(function (m) {
+                    return '<article class="capsule-msg-card"><div class="msg-card-top"><div class="msg-avatar">' + A.esc(A.initials(m.author)) + "</div>" +
+                        '<div class="msg-meta"><strong>' + A.esc(m.author) + '</strong><div class="msg-date">Ditulis ' + A.esc(A.formatDate(m.createdAt)) + "</div></div></div>" +
+                        '<p class="msg-content">' + A.esc(m.content) + "</p>" +
+                        (m.dream ? '<div class="capsule-dream">Cita-cita: ' + A.esc(m.dream) + "</div>" : "") + "</article>";
+                }).join("") : '<div class="empty-state">Tidak ada pesan.</div>';
+            } else {
+                $("opensLabel").textContent = "Terbuka pada";
+                $("timer").hidden = false;
+                clearInterval(timerId);
+                tick();
+                timerId = setInterval(tick, 1000);
+            }
+        }
+
+        function load() {
+            A.api("/timecapsule").then(render).catch(function (err) {
+                $("opensLabel").textContent = err.message;
+            });
+        }
+
+        $("form").addEventListener("submit", function (e) {
+            e.preventDefault();
+            var err = $("err"), btn = $("submitBtn");
+            err.hidden = true;
+            if (!$("fAuthor").value.trim() || !$("fContent").value.trim()) {
+                err.textContent = "Nama dan pesan wajib diisi.";
+                err.hidden = false;
+                return;
+            }
+            btn.disabled = true;
+            A.api("/timecapsule", {
+                method: "POST",
+                body: { author: $("fAuthor").value, content: $("fContent").value, dream: $("fDream").value }
+            }).then(function () {
+                A.toast("Pesan tersimpan di Time Capsule.");
+                e.target.reset();
+                if (typeof playSfx === "function") playSfx("success");
+                load();
+            }).catch(function (ex) { err.textContent = ex.message; err.hidden = false; })
+              .then(function () { btn.disabled = false; });
+        });
+
+        load();
+    })();
+    </script>
+</body>
+</html>

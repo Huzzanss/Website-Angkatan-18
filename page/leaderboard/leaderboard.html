@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="leaderboard">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="trophy"></div>
+            <h1>Leaderboard</h1>
+            <p>Peringkat poin dan badge Angkatan 18</p>
+        </div>
+
+        <div class="podium-wrap" id="podiumWrap" hidden><div class="podium" id="podium"></div></div>
+
+        <div class="lb-section">
+            <div class="lb-list" id="list">
+                <div class="loading-state"><div class="spinner"></div>Memuat leaderboard...</div>
+            </div>
+        </div>
+
+        <div class="badge-section">
+            <h2>Daftar Badge</h2>
+            <div class="badge-grid" id="badgeGrid"></div>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var list = document.getElementById("list");
+
+        function render(d) {
+            var entries = d.entries, badges = d.badges;
+
+            document.getElementById("badgeGrid").innerHTML = Object.keys(badges).map(function (k) {
+                return '<div class="badge-item"><div class="badge-icon-wrap">' + A.icon("star", 22) + "</div><strong>" +
+                    A.esc(badges[k].label) + "</strong><p>" + A.esc(badges[k].desc) + "</p></div>";
+            }).join("");
+
+            if (!entries.length) {
+                list.innerHTML = '<div class="empty-state">Leaderboard belum diisi oleh admin.</div>';
+                return;
+            }
+
+            if (entries.length >= 3) {
+                var order = [[entries[1], 2, 80], [entries[0], 1, 110], [entries[2], 3, 56]];
+                document.getElementById("podium").innerHTML = order.map(function (o) {
+                    return '<div class="podium-block"><div class="podium-avatar">' + A.esc(A.initials(o[0].name)) + "</div>" +
+                        '<div class="podium-name">' + A.esc(o[0].name) + '</div><div class="podium-score">' + o[0].points + " poin</div>" +
+                        '<div class="podium-stand" style="--height:' + o[2] + 'px">' + o[1] + "</div></div>";
+                }).join("");
+                document.getElementById("podiumWrap").hidden = false;
+            }
+
+            list.innerHTML = entries.map(function (e, i) {
+                return '<div class="lb-item' + (i < 3 ? " lb-top" : "") + '"><div class="lb-rank">' + (i + 1) + "</div>" +
+                    '<div class="lb-avatar">' + A.esc(A.initials(e.name)) + "</div>" +
+                    '<div class="lb-info"><strong>' + A.esc(e.name) + "</strong>" +
+                    (e.badges.length ? '<div class="lb-badges">' + e.badges.map(function (b) {
+                        return '<span class="pill">' + A.esc(badges[b] ? badges[b].label : b) + "</span>";
+                    }).join("") + "</div>" : "") + "</div>" +
+                    '<div class="lb-score">' + e.points + " poin</div></div>";
+            }).join("");
+        }
+
+        A.api("/leaderboard").then(render).catch(function (err) {
+            list.innerHTML = '<div class="empty-state">' + A.esc(err.message) + "</div>";
+        });
+    })();
+    </script>
+</body>
+</html>

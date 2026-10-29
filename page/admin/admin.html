@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Panel Admin | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="admin">
+    <div id="siteHeader"></div>
+
+    <main id="app" hidden>
+        <div class="dashboard-header">
+            <div>
+                <h1>Panel Admin</h1>
+                <p>Kelola konten Angkatan 18. Sesi berlaku 2 jam.</p>
+            </div>
+            <button class="btn-ghost btn-sm" id="logoutBtn"><span data-icon="logout" data-size="15"></span> Keluar</button>
+        </div>
+
+        <div class="dashboard-body">
+            <div class="dash-tabs" id="tabs" role="tablist">
+                <button class="dash-tab active" data-tab="announcements">Pengumuman</button>
+                <button class="dash-tab" data-tab="gallery">Galeri</button>
+                <button class="dash-tab" data-tab="moderation">Moderasi <span class="dash-badge" id="pendingBadge" hidden>0</span></button>
+                <button class="dash-tab" data-tab="forum">Forum</button>
+                <button class="dash-tab" data-tab="polls">Polling</button>
+                <button class="dash-tab" data-tab="capsule">Time Capsule</button>
+                <button class="dash-tab" data-tab="leaderboard">Leaderboard</button>
+            </div>
+
+            <!-- PENGUMUMAN -->
+            <section class="dash-panel active" id="panel-announcements">
+                <div class="msg-form-card" style="margin-bottom:20px">
+                    <h3 id="annFormTitle">Buat Pengumuman</h3>
+                    <div class="form-group"><label for="annTitle">Judul</label><input id="annTitle" maxlength="200"></div>
+                    <div class="form-group"><label for="annBody">Isi</label><textarea id="annBody" maxlength="3000"></textarea></div>
+                    <div class="form-group"><label for="annPriority">Prioritas</label>
+                        <select id="annPriority"><option value="low">Info</option><option value="medium">Sedang</option><option value="high">Penting</option></select></div>
+                    <div style="display:flex;gap:10px">
+                        <button class="btn" id="annSave">Simpan</button>
+                        <button class="btn-ghost" id="annCancel" hidden>Batal edit</button>
+                    </div>
+                </div>
+                <div class="admin-list" id="annList"></div>
+            </section>
+
+            <!-- GALERI -->
+            <section class="dash-panel" id="panel-gallery">
+                <div class="msg-form-card" style="margin-bottom:20px">
+                    <h3>Upload Foto</h3>
+                    <div class="form-group"><label for="galCaption">Keterangan (opsional, untuk semua foto yang dipilih)</label><input id="galCaption" maxlength="120"></div>
+                    <div class="file-drop" id="galDrop">Klik untuk memilih foto (boleh lebih dari satu). Foto dikecilkan otomatis.</div>
+                    <input type="file" id="galFile" accept="image/*" multiple hidden>
+                    <p class="form-hint" id="galStatus"></p>
+                </div>
+                <div class="admin-gallery-grid" id="galList"></div>
+            </section>
+
+            <!-- MODERASI -->
+            <section class="dash-panel" id="panel-moderation">
+                <div class="sub-tabs" id="modTabs">
+                    <button class="filter-tab active" data-mod="messages">Pesan &amp; Kesan</button>
+                    <button class="filter-tab" data-mod="shoutouts">Shoutout</button>
+                    <button class="filter-tab" data-mod="confessions">Confession</button>
+                </div>
+                <div class="admin-list" id="modList"></div>
+            </section>
+
+            <!-- FORUM -->
+            <section class="dash-panel" id="panel-forum">
+                <div class="admin-list" id="forumList"></div>
+            </section>
+
+            <!-- POLLING -->
+            <section class="dash-panel" id="panel-polls">
+                <div class="msg-form-card" style="margin-bottom:20px">
+                    <h3>Buat Polling</h3>
+                    <div class="form-group"><label for="pollQ">Pertanyaan</label><input id="pollQ" maxlength="200"></div>
+                    <div class="form-group"><label for="pollOpts">Pilihan (satu per baris, minimal 2)</label><textarea id="pollOpts" placeholder="Pilihan 1&#10;Pilihan 2"></textarea></div>
+                    <button class="btn" id="pollAdd">Buat Polling</button>
+                </div>
+                <div class="admin-list" id="pollList"></div>
+            </section>
+
+            <!-- TIME CAPSULE -->
+            <section class="dash-panel" id="panel-capsule">
+                <div class="notice" style="margin:0 0 16px;width:100%"><span data-icon="info" data-size="16"></span><span id="capsuleInfo">Memuat...</span></div>
+                <div class="admin-list" id="capsuleList"></div>
+            </section>
+
+            <!-- LEADERBOARD -->
+            <section class="dash-panel" id="panel-leaderboard">
+                <div class="msg-form-card" style="margin-bottom:20px">
+                    <h3>Tambah ke Leaderboard</h3>
+                    <div class="form-group"><label for="lbName">Nama</label><input id="lbName" maxlength="100" list="studentNames" autocomplete="off"><datalist id="studentNames"></datalist></div>
+                    <button class="btn" id="lbAdd">Tambahkan</button>
+                </div>
+                <div class="admin-list" id="lbList"></div>
+            </section>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script src="../../students-data.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var $ = function (id) { return document.getElementById(id); };
+        var PRIORITY = { high: "Penting", medium: "Sedang", low: "Info" };
+
+        /* ---------- util ---------- */
+        function call(path, method, body) {
+            return A.api(path, { method: method || "GET", body: body, auth: true }).catch(function (err) {
+                if (err.status === 401) {
+                    A.clearToken();
+                    location.replace("../login/login.html");
+                }
+                throw err;
+            });
+        }
+        function fail(err) { A.toast(err.message, "error"); }
+        function ok(msg) { A.toast(msg); if (typeof playSfx === "function") playSfx("success"); }
+        function ico(name, size) { return A.icon(name, size || 15); }
+        function btnIcon(act, id, name, title, danger, extra) {
+            return '<button class="' + (danger ? "btn-icon-danger" : "btn-icon") + '" data-act="' + act + '" data-id="' + A.esc(id) + '"' +
+                (extra || "") + ' title="' + title + '" aria-label="' + title + '">' + ico(name) + "</button>";
+        }
+        function empty(text) { return '<div class="empty-state">' + text + "</div>"; }
+
+        /* ---------- gerbang login ---------- */
+        if (!A.getToken()) { location.replace("../login/login.html"); return; }
+        call("/auth/check").then(function () {
+            $("app").hidden = false;
+            showTab("announcements");
+            refreshPending();
+        }).catch(function () { /* diarahkan oleh call() */ });
+
+        $("logoutBtn").addEventListener("click", function () {
+            A.clearToken();
+            location.href = "../../index.html";
+        });
+
+        /* ---------- tab ---------- */
+        var loaders = {};
+        function showTab(name) {
+            Array.prototype.forEach.call(document.querySelectorAll(".dash-tab"), function (t) {
+                var on = t.getAttribute("data-tab") === name;
+                t.classList.toggle("active", on);
+                t.setAttribute("role", "tab");
+                t.setAttribute("aria-selected", on ? "true" : "false");
+            });
+            Array.prototype.forEach.call(document.querySelectorAll(".dash-panel"), function (p) {
+                p.classList.toggle("active", p.id === "panel-" + name);
+                p.setAttribute("role", "tabpanel");
+            });
+            if (loaders[name]) loaders[name]();
+        }
+        $("tabs").addEventListener("click", function (e) {
+            var t = e.target.closest("[data-tab]");
+            if (t) showTab(t.getAttribute("data-tab"));
+        });
+
+        /* ================= PENGUMUMAN ================= */
+        var anns = [], annEdit = null;
+        function resetAnnForm() {
+            annEdit = null;
+            $("annFormTitle").textContent = "Buat Pengumuman";
+            $("annTitle").value = ""; $("annBody").value = ""; $("annPriority").value = "low";
+            $("annCancel").hidden = true;
+        }
+        loaders.announcements = function () {
+            call("/announcements").then(function (d) {
+                anns = d;
+                $("annList").innerHTML = d.length ? d.map(function (a) {
+                    return '<div class="admin-row priority-' + A.esc(a.priority) + '"><div class="admin-row-info"><strong>' + A.esc(a.title) + "</strong><p>" +
+                        A.esc(a.body) + '</p><span class="admin-row-meta">' + A.esc(PRIORITY[a.priority] || "Info") + " &middot; " + A.esc(A.formatDate(a.createdAt)) + "</span></div>" +
+                        '<div class="admin-row-actions">' + btnIcon("ann-edit", a.id, "edit", "Edit") + btnIcon("ann-del", a.id, "trash", "Hapus", true) + "</div></div>";
+                }).join("") : empty("Belum ada pengumuman.");
+            }).catch(fail);
+        };
+        $("annSave").addEventListener("click", function () {
+            var body = { title: $("annTitle").value, body: $("annBody").value, priority: $("annPriority").value };
+            if (!body.title.trim() || !body.body.trim()) { A.toast("Judul dan isi wajib diisi.", "error"); return; }
+            call(annEdit ? "/announcements/" + annEdit : "/announcements", annEdit ? "PUT" : "POST", body).then(function () {
+                ok(annEdit ? "Pengumuman diperbarui." : "Pengumuman dibuat.");
+                resetAnnForm();
+                loaders.announcements();
+            }).catch(fail);
+        });
+        $("annCancel").addEventListener("click", resetAnnForm);
+        $("annList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (!b) return;
+            var id = b.getAttribute("data-id");
+            if (b.getAttribute("data-act") === "ann-edit") {
+                var a = anns.filter(function (x) { return x.id === id; })[0];
+                if (!a) return;
+                annEdit = id;
+                $("annFormTitle").textContent = "Edit Pengumuman";
+                $("annTitle").value = a.title; $("annBody").value = a.body; $("annPriority").value = a.priority || "low";
+                $("annCancel").hidden = false;
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            } else if (confirm("Hapus pengumuman ini?")) {
+                call("/announcements/" + id, "DELETE").then(function () { ok("Dihapus."); loaders.announcements(); }).catch(fail);
+            }
+        });
+
+        /* ================= GALERI ================= */
+        function compress(file) {
+            return new Promise(function (resolve, reject) {
+                var img = new Image();
+                var url = URL.createObjectURL(file);
+                img.onload = function () {
+                    var max = 1280;
+                    var scale = Math.min(1, max / Math.max(img.width, img.height));
+                    var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+                    var c = document.createElement("canvas");
+                    c.width = w; c.height = h;
+                    c.getContext("2d").drawImage(img, 0, 0, w, h);
+                    URL.revokeObjectURL(url);
+                    var q = 0.82, data = c.toDataURL("image/jpeg", q).split(",")[1];
+                    while (data.length * 0.75 > 1.4 * 1024 * 1024 && q > 0.4) {
+                        q -= 0.12;
+                        data = c.toDataURL("image/jpeg", q).split(",")[1];
+                    }
+                    resolve(data);
+                };
+                img.onerror = function () { URL.revokeObjectURL(url); reject(new Error(file.name + " bukan gambar yang valid.")); };
+                img.src = url;
+            });
+        }
+        loaders.gallery = function () {
+            call("/gallery").then(function (d) {
+                $("galList").innerHTML = d.length ? d.map(function (p) {
+                    return '<div class="admin-photo-card"><img src="' + A.esc(p.url) + '" alt="" loading="lazy"><div class="admin-photo-info"><span>' +
+                        A.esc(p.caption || "Tanpa keterangan") + "</span><span style=\"display:flex\">" +
+                        btnIcon("gal-edit", p.id, "edit", "Ubah keterangan", false, ' data-cap="' + A.esc(p.caption || "") + '"') +
+                        btnIcon("gal-del", p.id, "trash", "Hapus", true) + "</span></div></div>";
+                }).join("") : '<div style="grid-column:1/-1">' + empty("Belum ada foto.") + "</div>";
+            }).catch(fail);
+        };
+        $("galDrop").addEventListener("click", function () { $("galFile").click(); });
+        $("galFile").addEventListener("change", function () {
+            var files = Array.prototype.slice.call(this.files);
+            var input = this;
+            if (!files.length) return;
+            var caption = $("galCaption").value;
+            var done = 0, failed = 0;
+            $("galStatus").textContent = "Mengunggah 0/" + files.length + "...";
+            files.reduce(function (chain, file) {
+                return chain.then(function () {
+                    return compress(file).then(function (b64) {
+                        return call("/gallery/upload", "POST", { contentType: "image/jpeg", dataBase64: b64, caption: caption });
+                    }).then(function () { done++; }, function (err) { failed++; fail(err); })
+                      .then(function () { $("galStatus").textContent = "Mengunggah " + (done + failed) + "/" + files.length + "..."; });
+                });
+            }, Promise.resolve()).then(function () {
+                $("galStatus").textContent = done + " foto berhasil diunggah" + (failed ? ", " + failed + " gagal." : ".");
+                input.value = "";
+                if (done) ok("Foto diunggah.");
+                loaders.gallery();
+            });
+        });
+        $("galList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (!b) return;
+            var id = b.getAttribute("data-id");
+            if (b.getAttribute("data-act") === "gal-edit") {
+                var cap = prompt("Keterangan foto:", b.getAttribute("data-cap") || "");
+                if (cap === null) return;
+                call("/gallery/" + id, "PUT", { caption: cap }).then(function () { ok("Keterangan disimpan."); loaders.gallery(); }).catch(fail);
+            } else if (confirm("Hapus foto ini?")) {
+                call("/gallery/" + id, "DELETE").then(function () { ok("Foto dihapus."); loaders.gallery(); }).catch(fail);
+            }
+        });
+
+        /* ================= MODERASI ================= */
+        var modType = "messages";
+        var modItems = [];
+        function describe(type, m) {
+            if (type === "messages") return { title: m.name + (m.to ? " untuk " + m.to : ""), text: m.content, tag: m.category };
+            if (type === "shoutouts") return { title: m.from + " untuk " + m.to, text: m.message, tag: m.type };
+            return { title: "Confession" + (m.to ? " untuk " + m.to : ""), text: m.content, tag: m.mood + " - " + (m.likes || 0) + " suka" };
+        }
+        function refreshPending() {
+            Promise.all(["messages", "shoutouts", "confessions"].map(function (t) {
+                return call("/" + t).catch(function () { return []; });
+            })).then(function (all) {
+                var n = all.reduce(function (sum, list) {
+                    return sum + list.filter(function (x) { return !x.approved; }).length;
+                }, 0);
+                $("pendingBadge").textContent = n;
+                $("pendingBadge").hidden = n === 0;
+            });
+        }
+        loaders.moderation = function () {
+            call("/" + modType).then(function (d) {
+                modItems = d.sort(function (a, b) { return (a.approved === true) - (b.approved === true) || (b.createdAt || 0) - (a.createdAt || 0); });
+                $("modList").innerHTML = d.length ? d.map(function (m) {
+                    var x = describe(modType, m);
+                    return '<div class="admin-row"><div class="admin-row-info"><strong>' + A.esc(x.title) + "</strong><p>" + A.esc(x.text) +
+                        '</p><span class="admin-row-meta">' + A.esc(x.tag) + " &middot; " + A.esc(A.relativeTime(m.createdAt)) + "</span></div>" +
+                        '<div class="admin-row-actions"><span class="pill ' + (m.approved ? "" : "pill-pending") + '">' + (m.approved ? "Tayang" : "Menunggu") + "</span>" +
+                        '<button class="btn btn-sm" data-act="mod-toggle" data-id="' + A.esc(m.id) + '">' + (m.approved ? "Sembunyikan" : "Setujui") + "</button>" +
+                        btnIcon("mod-del", m.id, "trash", "Hapus", true) + "</div></div>";
+                }).join("") : empty("Belum ada kiriman.");
+            }).catch(fail);
+        };
+        $("modTabs").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-mod]");
+            if (!b) return;
+            modType = b.getAttribute("data-mod");
+            Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle("active", x === b); });
+            loaders.moderation();
+        });
+        $("modList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (!b) return;
+            var id = b.getAttribute("data-id");
+            if (b.getAttribute("data-act") === "mod-toggle") {
+                call("/" + modType + "/" + id + "/approve", "PATCH").then(function (r) {
+                    ok(r.approved ? "Ditayangkan." : "Disembunyikan.");
+                    loaders.moderation(); refreshPending();
+                }).catch(fail);
+            } else if (confirm("Hapus kiriman ini permanen?")) {
+                call("/" + modType + "/" + id, "DELETE").then(function () { ok("Dihapus."); loaders.moderation(); refreshPending(); }).catch(fail);
+            }
+        });
+
+        /* ================= FORUM ================= */
+        loaders.forum = function () {
+            call("/forum").then(function (d) {
+                $("forumList").innerHTML = d.length ? d.map(function (t) {
+                    return '<div><div class="admin-row"><div class="admin-row-info"><strong>' + A.esc(t.title) + "</strong><p>" + A.esc(t.content.slice(0, 160)) +
+                        '</p><span class="admin-row-meta">' + A.esc(t.author) + " &middot; " + A.esc(t.category) + " &middot; " + (t.replies || 0) + " balasan</span></div>" +
+                        '<div class="admin-row-actions"><button class="btn-ghost btn-sm" data-act="f-replies" data-id="' + A.esc(t.id) + '">Balasan</button>' +
+                        btnIcon("f-del", t.id, "trash", "Hapus thread", true) + '</div></div><div id="rep-' + A.esc(t.id) + '" style="margin:6px 0 0 24px" hidden></div></div>';
+                }).join("") : empty("Belum ada thread.");
+            }).catch(fail);
+        };
+        function loadReplies(id) {
+            var box = $("rep-" + id);
+            return call("/forum/" + id).then(function (d) {
+                box.innerHTML = d.replies.length ? d.replies.map(function (r) {
+                    return '<div class="admin-row" style="margin-top:6px"><div class="admin-row-info"><strong>' + A.esc(r.author) + "</strong><p style=\"margin:0\">" + A.esc(r.content) +
+                        '</p></div><div class="admin-row-actions">' + btnIcon("f-delreply", id, "trash", "Hapus balasan", true, ' data-rid="' + A.esc(r.id) + '"') + "</div></div>";
+                }).join("") : '<p class="form-hint">Belum ada balasan.</p>';
+            });
+        }
+        $("forumList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (!b) return;
+            var id = b.getAttribute("data-id"), act = b.getAttribute("data-act");
+            if (act === "f-replies") {
+                var box = $("rep-" + id);
+                box.hidden = !box.hidden;
+                if (!box.hidden) loadReplies(id).catch(fail);
+            } else if (act === "f-del") {
+                if (confirm("Hapus thread beserta semua balasannya?")) call("/forum/" + id, "DELETE").then(function () { ok("Thread dihapus."); loaders.forum(); }).catch(fail);
+            } else if (act === "f-delreply") {
+                if (confirm("Hapus balasan ini?")) call("/forum/" + id + "/replies/" + b.getAttribute("data-rid"), "DELETE").then(function () { loadReplies(id); }).catch(fail);
+            }
+        });
+
+        /* ================= POLLING ================= */
+        loaders.polls = function () {
+            call("/polls").then(function (d) {
+                $("pollList").innerHTML = d.length ? d.map(function (p) {
+                    var total = p.options.reduce(function (n, o) { return n + o.votes; }, 0);
+                    return '<div class="admin-row"><div class="admin-row-info"><strong>' + A.esc(p.question) + "</strong><p>" +
+                        p.options.map(function (o) { return A.esc(o.text) + " (" + o.votes + ")"; }).join(" &middot; ") +
+                        '</p><span class="admin-row-meta">' + total + " suara</span></div>" +
+                        '<div class="admin-row-actions"><span class="pill ' + (p.active === false ? "pill-off" : "") + '">' + (p.active === false ? "Ditutup" : "Aktif") + "</span>" +
+                        '<button class="btn-ghost btn-sm" data-act="p-toggle" data-id="' + A.esc(p.id) + '">' + (p.active === false ? "Buka" : "Tutup") + "</button>" +
+                        btnIcon("p-del", p.id, "trash", "Hapus", true) + "</div></div>";
+                }).join("") : empty("Belum ada polling.");
+            }).catch(fail);
+        };
+        $("pollAdd").addEventListener("click", function () {
+            var options = $("pollOpts").value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+            if (!$("pollQ").value.trim() || options.length < 2) { A.toast("Isi pertanyaan dan minimal 2 pilihan.", "error"); return; }
+            call("/polls", "POST", { question: $("pollQ").value, options: options }).then(function () {
+                ok("Polling dibuat.");
+                $("pollQ").value = ""; $("pollOpts").value = "";
+                loaders.polls();
+            }).catch(fail);
+        });
+        $("pollList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (!b) return;
+            var id = b.getAttribute("data-id");
+            if (b.getAttribute("data-act") === "p-toggle") call("/polls/" + id + "/toggle", "PATCH").then(loaders.polls).catch(fail);
+            else if (confirm("Hapus polling ini beserta hasilnya?")) call("/polls/" + id, "DELETE").then(function () { ok("Dihapus."); loaders.polls(); }).catch(fail);
+        });
+
+        /* ================= TIME CAPSULE ================= */
+        loaders.capsule = function () {
+            call("/timecapsule").then(function (d) {
+                $("capsuleInfo").textContent = (d.unlocked ? "Sudah terbuka" : "Terkunci sampai " + A.formatDate(d.unlockDate)) + ". Total " + d.count + " pesan. Sebagai admin kamu bisa melihat dan menghapus pesan.";
+                $("capsuleList").innerHTML = d.messages.length ? d.messages.map(function (m) {
+                    return '<div class="admin-row"><div class="admin-row-info"><strong>' + A.esc(m.author) + "</strong><p>" + A.esc(m.content) +
+                        (m.dream ? "</p><p>Cita-cita: " + A.esc(m.dream) : "") + '</p><span class="admin-row-meta">' + A.esc(A.formatDate(m.createdAt)) + "</span></div>" +
+                        '<div class="admin-row-actions">' + btnIcon("c-del", m.id, "trash", "Hapus", true) + "</div></div>";
+                }).join("") : empty("Belum ada pesan.");
+            }).catch(fail);
+        };
+        $("capsuleList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (b && confirm("Hapus pesan ini?")) call("/timecapsule/" + b.getAttribute("data-id"), "DELETE").then(function () { ok("Dihapus."); loaders.capsule(); }).catch(fail);
+        });
+
+        /* ================= LEADERBOARD ================= */
+        var lb = { entries: [], badges: {} };
+        loaders.leaderboard = function () {
+            call("/leaderboard").then(function (r) {
+                lb = r;
+                $("studentNames").innerHTML = (window.A18_STUDENTS || []).map(function (s) { return '<option value="' + A.esc(s.name) + '">'; }).join("");
+                var badgeOptions = Object.keys(lb.badges).map(function (k) { return '<option value="' + k + '">' + A.esc(lb.badges[k].label) + "</option>"; }).join("");
+                $("lbList").innerHTML = lb.entries.length ? lb.entries.map(function (e, i) {
+                    return '<div class="admin-row" style="align-items:center" data-row="' + A.esc(e.id) + '"><div class="admin-row-info"><strong style="margin:0">' + (i + 1) + ". " + A.esc(e.name) + " &middot; " + e.points + " poin</strong>" +
+                        (e.badges.length ? '<div class="lb-badges">' + e.badges.map(function (b) { return '<span class="pill">' + A.esc(lb.badges[b].label) + "</span>"; }).join("") + "</div>" : "") + "</div>" +
+                        '<div class="admin-row-actions"><input type="number" class="lb-amount" value="10" min="1" max="1000" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text)" aria-label="Jumlah poin">' +
+                        '<button class="btn btn-sm" data-act="lb-add" data-id="' + A.esc(e.id) + '">+ Poin</button>' +
+                        '<button class="btn-ghost btn-sm" data-act="lb-sub" data-id="' + A.esc(e.id) + '">- Poin</button>' +
+                        '<select class="lb-badge" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text)" aria-label="Badge">' + badgeOptions + "</select>" +
+                        '<button class="btn-ghost btn-sm" data-act="lb-badge" data-id="' + A.esc(e.id) + '">Beri/Cabut</button>' +
+                        btnIcon("lb-del", e.id, "trash", "Hapus", true) + "</div></div>";
+                }).join("") : empty("Leaderboard masih kosong.");
+            }).catch(fail);
+        };
+        $("lbAdd").addEventListener("click", function () {
+            var name = $("lbName").value.trim();
+            if (!name) { A.toast("Nama wajib diisi.", "error"); return; }
+            call("/leaderboard", "POST", { name: name }).then(function () { ok("Ditambahkan."); $("lbName").value = ""; loaders.leaderboard(); }).catch(fail);
+        });
+        $("lbList").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-act]");
+            if (!b) return;
+            var id = b.getAttribute("data-id"), act = b.getAttribute("data-act");
+            var row = b.closest("[data-row]");
+            if (act === "lb-add" || act === "lb-sub") {
+                var n = parseInt(row.querySelector(".lb-amount").value, 10);
+                if (!n || n < 1) { A.toast("Jumlah poin tidak valid.", "error"); return; }
+                call("/leaderboard/" + id + "/points", "PATCH", { add: act === "lb-add" ? n : -n }).then(loaders.leaderboard).catch(fail);
+            } else if (act === "lb-badge") {
+                call("/leaderboard/" + id + "/badge", "PATCH", { badge: row.querySelector(".lb-badge").value }).then(loaders.leaderboard).catch(fail);
+            } else if (confirm("Hapus dari leaderboard?")) {
+                call("/leaderboard/" + id, "DELETE").then(function () { ok("Dihapus."); loaders.leaderboard(); }).catch(fail);
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

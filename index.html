@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Angkatan 18 | SMP Islam Bunga Bangsa Samarinda</title>
+    <meta name="description" content="Website Angkatan 18 SMP Islam Bunga Bangsa Samarinda (2026-2029): data siswa, galeri, pengumuman, dan berbagai fitur seru.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Angkatan 18 | SMP Islam Bunga Bangsa Samarinda">
+    <meta property="og:description" content="Pusat informasi, galeri, dan kenangan Angkatan 18.">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="" data-page="home">
+
+    <!-- BOOT SCREEN (sekali per sesi browser) -->
+    <div class="boot-screen" id="bootScreen" aria-hidden="true">
+        <div class="boot-content">
+            <div class="boot-logo">A18</div>
+            <p class="boot-title">ANGKATAN 18</p>
+            <p class="boot-subtitle">SMP Islam Bunga Bangsa Samarinda</p>
+            <div class="boot-bar"><div class="boot-bar-fill"></div></div>
+            <p class="boot-loading">LOADING...</p>
+        </div>
+    </div>
+
+    <div id="siteHeader"></div>
+
+    <main>
+        <!-- HERO -->
+        <section class="hero">
+            <div class="hero-bg-grid"></div>
+            <div class="hero-content">
+                <div class="hero-eyebrow">SMP Islam Bunga Bangsa Samarinda &middot; 2026&ndash;2029</div>
+                <h1 id="heroTitle">Angkatan 18</h1>
+                <p class="hero-desc">Ruang bersama untuk informasi, foto, dan kenangan satu angkatan.</p>
+                <div class="hero-actions">
+                    <a href="page/students/students.html" class="btn" id="heroStudents"></a>
+                    <a href="page/gallery/gallery.html" class="btn-ghost" id="heroGallery"></a>
+                </div>
+            </div>
+        </section>
+
+        <!-- STATISTIK -->
+        <div class="stats" id="stats">
+            <div class="stat-card"><div class="stat-number" id="statStudents">-</div><div class="stat-label">Siswa</div></div>
+            <div class="stat-card"><div class="stat-number blue" id="statPhotos">-</div><div class="stat-label">Foto Galeri</div></div>
+            <div class="stat-card"><div class="stat-number pink" id="statAnnouncements">-</div><div class="stat-label">Pengumuman</div></div>
+            <div class="stat-card"><div class="stat-number" id="statMessages">-</div><div class="stat-label">Pesan &amp; Kesan</div></div>
+        </div>
+
+        <!-- PENGUMUMAN TERBARU -->
+        <section class="section">
+            <div class="section-label">Pengumuman Terbaru</div>
+            <div id="latestAnnouncements" style="display:flex;flex-direction:column;gap:10px">
+                <div class="loading-state"><div class="spinner"></div>Memuat pengumuman...</div>
+            </div>
+        </section>
+
+        <!-- FITUR -->
+        <section class="section">
+            <div class="section-label">Jelajahi</div>
+            <div class="feature-grid" id="featureGrid"></div>
+        </section>
+
+        <!-- FOTO PILIHAN HARI INI -->
+        <section class="section" id="featuredSection" hidden>
+            <div class="section-label">Foto Pilihan Hari Ini</div>
+            <a href="page/gallery/gallery.html" class="featured-photo" style="display:block">
+                <img id="featuredImg" src="" alt="Foto pilihan hari ini">
+            </a>
+        </section>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <!-- NPC (bubble mengambang) -->
+    <div class="npc-widget" id="npcWidget">
+        <button class="npc-close" id="npcClose" aria-label="Tutup">&times;</button>
+        <div class="npc-bubble" id="npcBubble">Halo!</div>
+        <div class="npc-avatar" id="npcAvatar" title="Klik untuk pesan berikutnya"></div>
+    </div>
+
+    <script src="sound.js"></script>
+    <script src="common.js"></script>
+    <script src="students-data.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+
+        /* ----- Boot screen ----- */
+        var boot = document.getElementById("bootScreen");
+        var heroTitle = document.getElementById("heroTitle");
+
+        function typewriter(el, speed) {
+            var text = el.textContent;
+            el.textContent = "";
+            el.classList.add("typewriter-active");
+            var i = 0;
+            (function tick() {
+                el.textContent = text.slice(0, i++);
+                if (i <= text.length) setTimeout(tick, speed);
+                else el.classList.remove("typewriter-active");
+            })();
+        }
+
+        if (sessionStorage.getItem("a18_boot")) {
+            boot.remove();
+            typewriter(heroTitle, 70);
+        } else {
+            sessionStorage.setItem("a18_boot", "1");
+            if (typeof playSfx === "function") playSfx("boot");
+            setTimeout(function () {
+                boot.classList.add("boot-hide");
+                setTimeout(function () { boot.remove(); typewriter(heroTitle, 70); }, 500);
+            }, 1600);
+        }
+
+        /* ----- Tombol hero + kartu fitur (ikon dari common.js) ----- */
+        document.getElementById("heroStudents").innerHTML = A.icon("users", 16) + " Lihat Siswa";
+        document.getElementById("heroGallery").innerHTML = A.icon("image", 16) + " Buka Galeri";
+        document.getElementById("npcAvatar").innerHTML = A.icon("user", 22);
+
+        var FEATURES = [
+            ["students/students", "users", "Data Siswa", "Profil teman seangkatan"],
+            ["gallery/gallery", "image", "Galeri", "Foto dan momen angkatan"],
+            ["announcements/announcements", "bell", "Pengumuman", "Informasi penting"],
+            ["messages/messages", "message", "Pesan & Kesan", "Tinggalkan kenangan"],
+            ["shoutout/shoutout", "shout", "Shoutout", "Apresiasi untuk teman"],
+            ["confession/confession", "hidden", "Confession", "Cerita tanpa nama"],
+            ["forum/forum", "forum", "Forum", "Diskusi bersama"],
+            ["polling/polling", "poll", "Polling", "Voting dan survei"],
+            ["timecapsule/timecapsule", "lock", "Time Capsule", "Pesan untuk masa depan"],
+            ["leaderboard/leaderboard", "trophy", "Leaderboard", "Poin dan badge"],
+            ["wordle/wordle", "type", "Wordle Nama", "Tebak nama teman"]
+        ];
+        document.getElementById("featureGrid").innerHTML = FEATURES.map(function (f) {
+            return '<a href="page/' + f[0] + '.html" class="feature-card">' +
+                '<div class="feature-icon">' + A.icon(f[1], 20) + '</div>' +
+                '<div><h3>' + A.esc(f[2]) + '</h3><p>' + A.esc(f[3]) + '</p></div></a>';
+        }).join("");
+
+        /* ----- Data dari API ----- */
+        var npcLines = [
+            "Semangat belajar hari ini!",
+            "Jangan lupa salat tepat waktu ya.",
+            "Sudah cek pengumuman terbaru?",
+            "Coba main Wordle Nama, tebak nama teman kamu.",
+            "Tinggalkan pesan untuk teman di Pesan & Kesan.",
+            "Kelas yang rapi bikin belajar makin nyaman."
+        ];
+        var npcIndex = 0;
+
+        function showNpc() {
+            document.getElementById("npcBubble").textContent = npcLines[npcIndex % npcLines.length];
+            npcIndex++;
+        }
+
+        function setStat(id, value) {
+            document.getElementById(id).textContent = value;
+        }
+
+        function load() {
+            Promise.allSettled([
+                A.api("/gallery"),
+                A.api("/announcements"),
+                A.api("/messages")
+            ]).then(function (r) {
+                var students = window.A18_STUDENTS || [];
+                var gallery = r[0].status === "fulfilled" ? r[0].value : null;
+                var announcements = r[1].status === "fulfilled" ? r[1].value : null;
+                var messages = r[2].status === "fulfilled" ? r[2].value : null;
+
+                setStat("statStudents", students.length);
+                setStat("statPhotos", gallery ? gallery.length : "-");
+                setStat("statAnnouncements", announcements ? announcements.length : "-");
+                setStat("statMessages", messages ? messages.length : "-");
+
+                var box = document.getElementById("latestAnnouncements");
+                if (!announcements) {
+                    box.innerHTML = '<div class="empty-state">Pengumuman belum bisa dimuat. Coba lagi nanti.</div>';
+                } else if (!announcements.length) {
+                    box.innerHTML = '<div class="empty-state">Belum ada pengumuman.</div>';
+                } else {
+                    box.innerHTML = announcements.slice(0, 3).map(function (a) {
+                        return '<div class="announcement-card priority-' + A.esc(a.priority || "low") + '">' +
+                            "<h3>" + A.esc(a.title) + "</h3><p>" + A.esc(a.body) + "</p>" +
+                            '<div class="announcement-date">' + A.icon("clock", 13) + " " + A.esc(A.formatDate(a.createdAt)) + "</div></div>";
+                    }).join("");
+                    npcLines.unshift('Pengumuman terbaru: "' + announcements[0].title + '"');
+                }
+
+                if (gallery && gallery.length) {
+                    var start = new Date(new Date().getFullYear(), 0, 0);
+                    var dayOfYear = Math.floor((new Date() - start) / 86400000);
+                    var photo = gallery[dayOfYear % gallery.length];
+                    document.getElementById("featuredImg").src = photo.url;
+                    document.getElementById("featuredSection").hidden = false;
+                }
+            });
+        }
+
+        load();
+        showNpc();
+        setInterval(showNpc, 9000);
+        document.getElementById("npcAvatar").addEventListener("click", showNpc);
+        document.getElementById("npcClose").addEventListener("click", function () {
+            document.getElementById("npcWidget").classList.add("npc-hidden");
+        });
+    })();
+    </script>
+</body>
+</html>

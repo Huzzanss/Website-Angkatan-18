@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordle Nama | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="wordle">
+    <div id="siteHeader"></div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-icon" data-icon="type"></div>
+            <h1>Wordle Nama</h1>
+            <p>Tebak nama depan teman Angkatan 18 dalam 6 percobaan</p>
+        </div>
+
+        <div class="wordle-wrap">
+            <div class="wordle-hint" id="hint">Memuat...</div>
+            <div class="wordle-grid" id="grid" aria-label="Papan tebakan"></div>
+            <div class="wordle-keyboard" id="keyboard"></div>
+            <div class="wordle-status" id="status" role="status" aria-live="polite"></div>
+            <div class="wordle-actions">
+                <button class="btn-outline" id="giveUp">Menyerah</button>
+                <button class="btn" id="next">Nama Lain</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script src="../../students-data.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var $ = function (id) { return document.getElementById(id); };
+        var MAX = 6;
+
+        // Cadangan bila data siswa belum ada di database.
+        var FALLBACK = ["FAALIH","HANDANU","ALMER","HAFIDZ","ZHARIF","CHAERUL","AHMAD","ASYRAF","FAEYZA","GHAZALI","FAQIH",
+            "LATHIEF","NAUFAL","RAYHAN","AISYAH","ADINDA","ADELIA","NABILA","NADHIFA","KANAYA","ALISYA","KIMBERLY","AFIKA",
+            "NURUL","ANNISA","PUTRI","NADA","ALISHA","KHALILAH","FATIMAH","AMIRAH","ZAHRATU"];
+        var KEYS = [
+            ["Q","W","E","R","T","Y","U","I","O","P"],
+            ["A","S","D","F","G","H","J","K","L"],
+            ["ENTER","Z","X","C","V","B","N","M","DEL"]
+        ];
+
+        var words = FALLBACK.slice();
+        var target = "", guesses = [], current = "", over = false;
+
+        function newGame() {
+            target = words[Math.floor(Math.random() * words.length)];
+            guesses = []; current = ""; over = false;
+            $("status").textContent = "";
+            $("hint").textContent = "Nama depan siswa, " + target.length + " huruf";
+            var grid = $("grid");
+            grid.style.gridTemplateColumns = "repeat(" + target.length + ", 1fr)";
+            grid.innerHTML = "";
+            for (var i = 0; i < MAX * target.length; i++) {
+                var c = document.createElement("div");
+                c.className = "wordle-cell";
+                grid.appendChild(c);
+            }
+            buildKeyboard();
+        }
+
+        function cell(r, c) { return $("grid").children[r * target.length + c]; }
+
+        function buildKeyboard() {
+            var kb = $("keyboard");
+            kb.innerHTML = "";
+            KEYS.forEach(function (row) {
+                var el = document.createElement("div");
+                el.className = "wordle-kb-row";
+                row.forEach(function (k) {
+                    var b = document.createElement("button");
+                    b.className = "wordle-key" + (k.length > 1 ? " wide" : "");
+                    b.textContent = k === "DEL" ? "Hapus" : k;
+                    b.setAttribute("data-key", k);
+                    b.addEventListener("click", function () { press(k); });
+                    el.appendChild(b);
+                });
+                kb.appendChild(el);
+            });
+        }
+
+        function paintRow() {
+            for (var c = 0; c < target.length; c++) {
+                var el = cell(guesses.length, c);
+                el.textContent = current[c] || "";
+                el.classList.toggle("wordle-cell-filled", !!current[c]);
+            }
+        }
+
+        function evaluate(guess) {
+            var res = [], used = [], i;
+            for (i = 0; i < target.length; i++) { res[i] = "absent"; used[i] = false; }
+            for (i = 0; i < target.length; i++) {
+                if (guess[i] === target[i]) { res[i] = "correct"; used[i] = true; }
+            }
+            for (i = 0; i < target.length; i++) {
+                if (res[i] === "correct") continue;
+                for (var j = 0; j < target.length; j++) {
+                    if (!used[j] && target[j] === guess[i]) { res[i] = "present"; used[j] = true; break; }
+                }
+            }
+            return res;
+        }
+
+        function colorKey(letter, state) {
+            var b = document.querySelector('.wordle-key[data-key="' + letter + '"]');
+            if (!b) return;
+            var rank = { correct: 3, present: 2, absent: 1 };
+            var old = b.getAttribute("data-state");
+            if (old && rank[old] >= rank[state]) return;
+            b.setAttribute("data-state", state);
+            b.classList.remove("wordle-correct", "wordle-present", "wordle-absent");
+            b.classList.add("wordle-" + state);
+        }
+
+        function submit() {
+            var guess = current, row = guesses.length;
+            var res = evaluate(guess);
+            res.forEach(function (state, c) {
+                setTimeout(function () {
+                    var el = cell(row, c);
+                    el.classList.add("wordle-flip", "wordle-" + state);
+                    colorKey(guess[c], state);
+                }, c * 90);
+            });
+            guesses.push(guess);
+            current = "";
+            var done = target.length * 90 + 150;
+            setTimeout(function () {
+                if (guess === target) {
+                    over = true;
+                    $("status").textContent = "Benar! Namanya " + target + ".";
+                    if (typeof playSfx === "function") playSfx("success");
+                } else if (guesses.length >= MAX) {
+                    over = true;
+                    $("status").textContent = "Jawabannya: " + target;
+                    if (typeof playSfx === "function") playSfx("error");
+                }
+            }, done);
+        }
+
+        function shake() {
+            for (var c = 0; c < target.length; c++) {
+                (function (el) {
+                    el.classList.add("wordle-shake");
+                    setTimeout(function () { el.classList.remove("wordle-shake"); }, 400);
+                })(cell(guesses.length, c));
+            }
+        }
+
+        function press(k) {
+            if (over) return;
+            if (k === "DEL") current = current.slice(0, -1);
+            else if (k === "ENTER") {
+                if (current.length !== target.length) { shake(); return; }
+                submit();
+                return;
+            } else if (current.length < target.length) current += k;
+            paintRow();
+        }
+
+        window.addEventListener("keydown", function (e) {
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (e.key === "Enter") press("ENTER");
+            else if (e.key === "Backspace") press("DEL");
+            else if (/^[a-zA-Z]$/.test(e.key)) press(e.key.toUpperCase());
+        });
+
+        $("next").addEventListener("click", newGame);
+        $("giveUp").addEventListener("click", function () {
+            if (over) return;
+            over = true;
+            $("status").textContent = "Jawabannya: " + target;
+        });
+
+        // Pakai nama depan siswa dari daftar bila cukup banyak, kalau tidak pakai daftar cadangan.
+        var firsts = (window.A18_STUDENTS || []).map(function (s) {
+            return String(s.name).trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z]/g, "");
+        }).filter(function (n) { return n.length >= 4 && n.length <= 8; });
+        if (firsts.length >= 5) words = Array.from(new Set(firsts));
+        newGame();
+    })();
+    </script>
+</body>
+</html>

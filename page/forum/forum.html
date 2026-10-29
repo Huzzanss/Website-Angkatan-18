@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forum | Angkatan 18</title>
+    <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+    <link rel="stylesheet" href="../../style.css">
+    <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("a18_theme") || "dark");</script>
+</head>
+<body data-root="../../" data-page="forum">
+    <div id="siteHeader"></div>
+
+    <main>
+        <!-- DAFTAR THREAD -->
+        <section id="listView">
+            <div class="page-header">
+                <div class="page-header-icon" data-icon="forum"></div>
+                <h1>Forum</h1>
+                <p>Diskusi, tanya jawab, dan berbagi cerita</p>
+            </div>
+
+            <div class="controls">
+                <div class="filter-tabs" id="catTabs"></div>
+                <button class="btn" id="newBtn" style="margin-left:auto"><span data-icon="plus" data-size="16"></span> Buat Thread</button>
+            </div>
+
+            <div class="stack" id="threads">
+                <div class="loading-state"><div class="spinner"></div>Memuat thread...</div>
+            </div>
+        </section>
+
+        <!-- DETAIL THREAD -->
+        <section id="threadView" hidden>
+            <div class="thread-header">
+                <button class="btn-ghost btn-sm" id="backBtn"><span data-icon="arrow" data-size="14" style="display:inline-flex;transform:rotate(180deg)"></span> Kembali</button>
+                <div class="thread-title-wrap">
+                    <span class="pill" id="tCat"></span>
+                    <h2 id="tTitle"></h2>
+                    <div class="thread-op">
+                        <div class="msg-avatar small" id="tAvatar"></div>
+                        <div class="msg-meta"><strong id="tAuthor"></strong><div class="msg-date" id="tDate"></div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="thread-header" style="padding-top:16px"><p class="thread-body-text" id="tBody"></p></div>
+            <div class="thread-divider" id="tCount"></div>
+            <div class="thread-replies" id="replies"></div>
+
+            <div class="reply-form-wrap">
+                <div class="msg-form-card">
+                    <h3>Balas Thread</h3>
+                    <form id="replyForm" novalidate>
+                        <div class="form-group">
+                            <label for="rName">Nama</label>
+                            <input id="rName" maxlength="100" placeholder="Boleh dikosongkan (Anonim)">
+                        </div>
+                        <div class="form-group">
+                            <label for="rContent">Balasan</label>
+                            <textarea id="rContent" maxlength="2000" placeholder="Tulis balasan..."></textarea>
+                        </div>
+                        <div class="form-error" id="rErr" hidden></div>
+                        <button class="btn btn-full" id="rBtn" type="submit">Kirim Balasan</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODAL BUAT THREAD -->
+    <div class="modal-overlay" id="newModal" hidden>
+        <div class="modal-box">
+            <div class="modal-head"><h3>Buat Thread Baru</h3><button class="modal-close" id="newClose" aria-label="Tutup"><span data-icon="x" data-size="18"></span></button></div>
+            <form id="newForm" novalidate>
+                <div class="form-group"><label for="nTitle">Judul</label><input id="nTitle" maxlength="150" placeholder="Judul diskusi"></div>
+                <div class="form-row">
+                    <div class="form-group"><label for="nAuthor">Nama</label><input id="nAuthor" maxlength="100" placeholder="Anonim"></div>
+                    <div class="form-group"><label for="nCat">Kategori</label>
+                        <select id="nCat"><option>Umum</option><option>Tanya Jawab</option><option>Curhat</option><option>Info</option></select></div>
+                </div>
+                <div class="form-group"><label for="nContent">Isi</label><textarea id="nContent" maxlength="3000" placeholder="Jelaskan topik diskusi..."></textarea></div>
+                <div class="form-error" id="nErr" hidden></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-ghost" id="nCancel">Batal</button>
+                    <button type="submit" class="btn" id="nBtn">Buat Thread</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="siteFooter"></div>
+
+    <script src="../../sound.js"></script>
+    <script src="../../common.js"></script>
+    <script>
+    (function () {
+        var A = window.A18;
+        var CATS = ["Semua", "Umum", "Tanya Jawab", "Curhat", "Info"];
+        var threads = [];
+        var activeCat = "Semua";
+        var currentId = null;
+        var $ = function (id) { return document.getElementById(id); };
+
+        /* ---- kategori ---- */
+        $("catTabs").innerHTML = CATS.map(function (c) {
+            return '<button class="filter-tab' + (c === activeCat ? " active" : "") + '" data-cat="' + c + '">' + c + "</button>";
+        }).join("");
+        $("catTabs").addEventListener("click", function (e) {
+            var b = e.target.closest("[data-cat]");
+            if (!b) return;
+            activeCat = b.getAttribute("data-cat");
+            Array.prototype.forEach.call(this.children, function (x) { x.classList.toggle("active", x === b); });
+            renderList();
+        });
+
+        /* ---- daftar ---- */
+        function renderList() {
+            var shown = threads.filter(function (t) { return activeCat === "Semua" || t.category === activeCat; });
+            if (!shown.length) {
+                $("threads").innerHTML = '<div class="empty-state">Belum ada thread. Mulai diskusi pertama!</div>';
+                return;
+            }
+            $("threads").innerHTML = shown.map(function (t) {
+                var preview = t.content.length > 140 ? t.content.slice(0, 140) + "..." : t.content;
+                return '<a class="thread-card" href="#' + A.esc(t.id) + '">' +
+                    '<div class="thread-cat">' + A.esc(t.category) + "</div>" +
+                    '<div class="thread-card-title">' + A.esc(t.title) + "</div>" +
+                    '<p class="thread-preview">' + A.esc(preview) + "</p>" +
+                    '<div class="thread-meta"><span>' + A.esc(t.author) + "</span><span>" + A.icon("message", 12) + " " + (t.replies || 0) +
+                    " balasan</span><span>" + A.esc(A.relativeTime(t.lastActivity)) + "</span></div></a>";
+            }).join("");
+        }
+
+        function loadList() {
+            return A.api("/forum").then(function (d) { threads = d; renderList(); })
+                .catch(function (err) { $("threads").innerHTML = '<div class="empty-state">' + A.esc(err.message) + "</div>"; });
+        }
+
+        /* ---- detail ---- */
+        function loadThread(id) {
+            A.api("/forum/" + encodeURIComponent(id)).then(function (d) {
+                var t = d.thread;
+                $("tCat").textContent = t.category;
+                $("tTitle").textContent = t.title;
+                $("tAuthor").textContent = t.author;
+                $("tDate").textContent = A.relativeTime(t.createdAt);
+                $("tAvatar").textContent = A.initials(t.author);
+                $("tBody").textContent = t.content;
+                $("tCount").textContent = d.replies.length + " Balasan";
+                $("replies").innerHTML = d.replies.length ? d.replies.map(function (r) {
+                    return '<div class="reply-card"><div class="msg-avatar small">' + A.esc(A.initials(r.author)) + "</div>" +
+                        '<div class="reply-body"><strong>' + A.esc(r.author) + ' <span class="msg-date" style="display:inline;font-weight:400">&middot; ' +
+                        A.esc(A.relativeTime(r.createdAt)) + "</span></strong><p>" + A.esc(r.content) + "</p></div></div>";
+                }).join("") : '<div class="empty-state">Belum ada balasan.</div>';
+            }).catch(function (err) {
+                A.toast(err.message, "error");
+                location.hash = "";
+            });
+        }
+
+        function route() {
+            var id = decodeURIComponent(location.hash.slice(1));
+            if (id) {
+                currentId = id;
+                $("listView").hidden = true;
+                $("threadView").hidden = false;
+                window.scrollTo(0, 0);
+                loadThread(id);
+            } else {
+                currentId = null;
+                $("threadView").hidden = true;
+                $("listView").hidden = false;
+                loadList();
+            }
+        }
+        window.addEventListener("hashchange", route);
+        $("backBtn").addEventListener("click", function () { location.hash = ""; });
+
+        /* ---- balas ---- */
+        $("replyForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            var err = $("rErr"), btn = $("rBtn");
+            err.hidden = true;
+            if (!$("rContent").value.trim()) { err.textContent = "Balasan tidak boleh kosong."; err.hidden = false; return; }
+            btn.disabled = true;
+            A.api("/forum/" + encodeURIComponent(currentId) + "/replies", {
+                method: "POST",
+                body: { author: $("rName").value, content: $("rContent").value }
+            }).then(function () {
+                $("rContent").value = "";
+                A.toast("Balasan terkirim.");
+                loadThread(currentId);
+            }).catch(function (ex) { err.textContent = ex.message; err.hidden = false; })
+              .then(function () { btn.disabled = false; });
+        });
+
+        /* ---- thread baru ---- */
+        var lastFocus = null;
+        function openModal() { lastFocus = document.activeElement; $("newModal").hidden = false; $("nTitle").focus(); }
+        function closeModal() {
+            if ($("newModal").hidden) return;
+            $("newModal").hidden = true;
+            if (lastFocus && lastFocus.focus) lastFocus.focus();
+        }
+        $("newBtn").addEventListener("click", openModal);
+        $("newClose").addEventListener("click", closeModal);
+        $("nCancel").addEventListener("click", closeModal);
+        $("newModal").addEventListener("click", function (e) { if (e.target === this) closeModal(); });
+        window.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+
+        $("newForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            var err = $("nErr"), btn = $("nBtn");
+            err.hidden = true;
+            if (!$("nTitle").value.trim() || !$("nContent").value.trim()) {
+                err.textContent = "Judul dan isi wajib diisi.";
+                err.hidden = false;
+                return;
+            }
+            btn.disabled = true;
+            A.api("/forum", {
+                method: "POST",
+                body: { title: $("nTitle").value, author: $("nAuthor").value, category: $("nCat").value, content: $("nContent").value }
+            }).then(function (r) {
+                e.target.reset();
+                closeModal();
+                A.toast("Thread dibuat.");
+                location.hash = r.id;
+            }).catch(function (ex) { err.textContent = ex.message; err.hidden = false; })
+              .then(function () { btn.disabled = false; });
+        });
+
+        route();
+    })();
+    </script>
+</body>
+</html>
