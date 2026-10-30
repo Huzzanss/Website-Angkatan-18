@@ -24,7 +24,7 @@
         <div class="dashboard-body">
             <div class="dash-tabs" id="tabs" role="tablist">
                 <button class="dash-tab active" data-tab="announcements">Pengumuman</button>
-                <button class="dash-tab" data-tab="gallery">Galeri</button>
+                <button class="dash-tab" data-tab="gallery">Galeri <span class="dash-badge" id="galBadge" hidden>0</span></button>
                 <button class="dash-tab" data-tab="moderation">Moderasi <span class="dash-badge" id="pendingBadge" hidden>0</span></button>
                 <button class="dash-tab" data-tab="forum">Forum</button>
                 <button class="dash-tab" data-tab="polls">Polling</button>
@@ -57,6 +57,11 @@
                     <input type="file" id="galFile" accept="image/*" multiple hidden>
                     <p class="form-hint" id="galStatus"></p>
                 </div>
+                <div id="galPendingWrap" hidden style="margin-bottom:24px">
+                    <div class="panel-top"><h2>Menunggu persetujuan</h2></div>
+                    <div class="admin-gallery-grid" id="galPending"></div>
+                </div>
+                <div class="panel-top"><h2>Foto yang tayang</h2></div>
                 <div class="admin-gallery-grid" id="galList"></div>
             </section>
 
@@ -213,37 +218,35 @@
         });
 
         /* ================= GALERI ================= */
-        function compress(file) {
-            return new Promise(function (resolve, reject) {
-                var img = new Image();
-                var url = URL.createObjectURL(file);
-                img.onload = function () {
-                    var max = 1280;
-                    var scale = Math.min(1, max / Math.max(img.width, img.height));
-                    var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-                    var c = document.createElement("canvas");
-                    c.width = w; c.height = h;
-                    c.getContext("2d").drawImage(img, 0, 0, w, h);
-                    URL.revokeObjectURL(url);
-                    var q = 0.82, data = c.toDataURL("image/jpeg", q).split(",")[1];
-                    while (data.length * 0.75 > 1.4 * 1024 * 1024 && q > 0.4) {
-                        q -= 0.12;
-                        data = c.toDataURL("image/jpeg", q).split(",")[1];
-                    }
-                    resolve(data);
-                };
-                img.onerror = function () { URL.revokeObjectURL(url); reject(new Error(file.name + " bukan gambar yang valid.")); };
-                img.src = url;
+        function photoCard(p, pending) {
+            var priv = pending && !p.external;
+            return '<div class="admin-photo-card"><img ' + (priv ? 'data-private="' + A.esc(p.url) + '"' : 'src="' + A.esc(p.url) + '" loading="lazy"') +
+                ' alt=""><div class="admin-photo-info"><span>' + A.esc(p.caption || "Tanpa keterangan") +
+                (pending && p.uploader ? " - " + A.esc(p.uploader) : "") + '</span><span style="display:flex">' +
+                (pending ? btnIcon("gal-approve", p.id, "check", "Setujui") : "") +
+                btnIcon("gal-edit", p.id, "edit", "Ubah keterangan", false, ' data-cap="' + A.esc(p.caption || "") + '"') +
+                btnIcon("gal-del", p.id, "trash", "Hapus", true) + "</span></div></div>";
+        }
+        // Foto yang belum disetujui hanya bisa dibuka dengan token admin, jadi diunduh lewat fetch.
+        function loadPrivateImages(box) {
+            Array.prototype.forEach.call(box.querySelectorAll("img[data-private]"), function (img) {
+                fetch(img.getAttribute("data-private"), { headers: { Authorization: "Bearer " + A.getToken() } })
+                    .then(function (r) { if (!r.ok) throw new Error("gagal"); return r.blob(); })
+                    .then(function (blob) { img.src = URL.createObjectURL(blob); })
+                    .catch(function () { img.alt = "Gagal memuat foto"; });
             });
         }
         loaders.gallery = function () {
             call("/gallery").then(function (d) {
-                $("galList").innerHTML = d.length ? d.map(function (p) {
-                    return '<div class="admin-photo-card"><img src="' + A.esc(p.url) + '" alt="" loading="lazy"><div class="admin-photo-info"><span>' +
-                        A.esc(p.caption || "Tanpa keterangan") + "</span><span style=\"display:flex\">" +
-                        btnIcon("gal-edit", p.id, "edit", "Ubah keterangan", false, ' data-cap="' + A.esc(p.caption || "") + '"') +
-                        btnIcon("gal-del", p.id, "trash", "Hapus", true) + "</span></div></div>";
-                }).join("") : '<div style="grid-column:1/-1">' + empty("Belum ada foto.") + "</div>";
+                var pending = d.filter(function (p) { return !p.approved; });
+                var live = d.filter(function (p) { return p.approved; });
+                $("galPendingWrap").hidden = !pending.length;
+                $("galPending").innerHTML = pending.map(function (p) { return photoCard(p, true); }).join("");
+                loadPrivateImages($("galPending"));
+                $("galList").innerHTML = live.length ? live.map(function (p) { return photoCard(p, false); }).join("")
+                    : '<div style="grid-column:1/-1">' + empty("Belum ada foto yang tayang.") + "</div>";
+                $("galBadge").textContent = pending.length;
+                $("galBadge").hidden = pending.length === 0;
             }).catch(fail);
         };
         $("galDrop").addEventListener("click", function () { $("galFile").click(); });
@@ -256,7 +259,7 @@
             $("galStatus").textContent = "Mengunggah 0/" + files.length + "...";
             files.reduce(function (chain, file) {
                 return chain.then(function () {
-                    return compress(file).then(function (b64) {
+                    return A.compressImage(file, 1.4 * 1024 * 1024).then(function (b64) {
                         return call("/gallery/upload", "POST", { contentType: "image/jpeg", dataBase64: b64, caption: caption });
                     }).then(function () { done++; }, function (err) { failed++; fail(err); })
                       .then(function () { $("galStatus").textContent = "Mengunggah " + (done + failed) + "/" + files.length + "..."; });
@@ -268,11 +271,13 @@
                 loaders.gallery();
             });
         });
-        $("galList").addEventListener("click", function (e) {
+        $("panel-gallery").addEventListener("click", function (e) {
             var b = e.target.closest("[data-act]");
             if (!b) return;
             var id = b.getAttribute("data-id");
-            if (b.getAttribute("data-act") === "gal-edit") {
+            if (b.getAttribute("data-act") === "gal-approve") {
+                call("/gallery/" + id + "/approve", "PATCH").then(function () { ok("Foto ditayangkan."); loaders.gallery(); }).catch(fail);
+            } else if (b.getAttribute("data-act") === "gal-edit") {
                 var cap = prompt("Keterangan foto:", b.getAttribute("data-cap") || "");
                 if (cap === null) return;
                 call("/gallery/" + id, "PUT", { caption: cap }).then(function () { ok("Keterangan disimpan."); loaders.gallery(); }).catch(fail);
@@ -290,6 +295,11 @@
             return { title: "Confession" + (m.to ? " untuk " + m.to : ""), text: m.content, tag: m.mood + " - " + (m.likes || 0) + " suka" };
         }
         function refreshPending() {
+            call("/gallery").then(function (d) {
+                var n = d.filter(function (p) { return !p.approved; }).length;
+                $("galBadge").textContent = n;
+                $("galBadge").hidden = n === 0;
+            }).catch(function () { /* abaikan */ });
             Promise.all(["messages", "shoutouts", "confessions"].map(function (t) {
                 return call("/" + t).catch(function () { return []; });
             })).then(function (all) {

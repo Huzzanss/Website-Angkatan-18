@@ -130,6 +130,45 @@
     toastTimer = setTimeout(function () { el.classList.remove("show"); }, 2800);
   }
 
+  /* ---------- KOMPRES FOTO (dipakai upload publik & admin) ---------- */
+  // Mengecilkan foto jadi JPEG <= maxBytes. Mengembalikan Promise<string base64>.
+  function compressImage(file, maxBytes) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var longest = Math.max(img.width, img.height);
+        var side = Math.min(1280, longest);
+        for (var attempt = 0; attempt < 6; attempt++) {
+          var scale = side / longest;
+          var w = Math.max(1, Math.round(img.width * scale));
+          var h = Math.max(1, Math.round(img.height * scale));
+          var c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          var q = 0.82;
+          var data = c.toDataURL("image/jpeg", q).split(",")[1];
+          while (data.length * 0.75 > maxBytes && q > 0.45) {
+            q -= 0.1;
+            data = c.toDataURL("image/jpeg", q).split(",")[1];
+          }
+          if (data.length * 0.75 <= maxBytes) { resolve(data); return; }
+          side = Math.round(side * 0.8);
+        }
+        reject(new Error("Foto terlalu besar untuk dikecilkan. Pilih foto lain."));
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error((file && file.name ? file.name : "File") + " bukan gambar yang valid."));
+      };
+      img.src = url;
+    });
+  }
+
   /* ---------- TEMA ---------- */
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
@@ -306,7 +345,7 @@
   /* ---------- PUBLIK ---------- */
   window.A18 = {
     ROOT: ROOT, PAGE: PAGE,
-    api: api, icon: icon, esc: esc, toast: toast,
+    api: api, icon: icon, esc: esc, toast: toast, compressImage: compressImage,
     formatDate: formatDate, relativeTime: relativeTime,
     avatarColor: avatarColor, initials: initials,
     getToken: getToken, setToken: setToken, clearToken: clearToken,
